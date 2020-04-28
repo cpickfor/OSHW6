@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <math.h>
 
 #define FS_MAGIC           0xf0f03410
 #define INODES_PER_BLOCK   128
@@ -83,7 +84,30 @@ ssize_t allocate_free_block(struct FileSystem * fs){
 
 int fs_format()
 {
-	return 0;
+	//check if mounted
+	
+	union fs_block block;
+	disk_read(0,block.data);
+	int nblocks = disk_size();
+	int ninodeblocks = ceil(nblocks/10);
+
+	for(int i = 1; i <= block.super.ninodeblocks; i++) {
+        union fs_block inode;
+        disk_read(i,inode.data);
+        for(int j = 0; j < INODES_PER_BLOCK; j++) {
+            inode.inode[j].isvalid = 0;
+        }
+        disk_write(i,inode.data);
+    }
+
+	union fs_block superblock;
+	superblock.super.magic = FS_MAGIC;
+	superblock.super.nblocks = nblocks;
+	superblock.super.ninodeblocks = ninodeblocks;
+	superblock.super.ninodes = INODES_PER_BLOCK;
+    disk_write(0,superblock.data);
+
+    return 1;
 }
 
 void fs_debug()
@@ -105,7 +129,7 @@ void fs_debug()
         for(int j = 0; j < INODES_PER_BLOCK; j++) {	//loop through inodes
             if(temp.inode[j].isvalid == 1) {	//print if inode is valid
                 int inumber = (i-1)*INODES_PER_BLOCK + j;
-                printf("inode %d\n", inumber);
+                printf("inode %d:\n", inumber);
                 printf("    size: %d bytes\n", temp.inode[j].size);
 		if(temp.inode[j].size == 0){
 			return;
