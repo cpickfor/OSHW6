@@ -51,6 +51,18 @@ void update_Bmap(){
 
 }
 
+void fs_save_inode(int inode_number, struct fs_inode *node)
+{
+	union fs_block block;
+	int block_number = inode_number / INODES_PER_BLOCK + 1;
+	int inode_index = inode_number % INODES_PER_BLOCK;
+	disk_read(block_number,block.data);
+	if(!block.inode[inode_index].isvalid) return;
+	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
+	disk_write(block_number,block.data);
+	return;
+}
+
 int fs_read(int inode_number, char *data, int length, int offset)
 {
 	if(length == 0){return 0;}
@@ -136,17 +148,7 @@ int fs_create()
 	return 0;
 }
 
-void fs_save_inode(int inode_number, struct fs_inode *node)
-{
-	union fs_block block;
-	int block_number = inode_number / INODES_PER_BLOCK + 1;
-	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block.data);
-	if(!block.inode[inode_index].isvalid) return;
-	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
-	disk_write(block_number,block.data);
-	return;
-}
+
 
 void initialize_free_block_bitmap(struct FileSystem * fs){
 
