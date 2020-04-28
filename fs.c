@@ -51,7 +51,7 @@ void update_Bmap(){
 
 }
 
-bool fs_save_inode(FileSystem *fs, size_t inode_number, Inode *node)
+bool fs_save_inode(size_t inode_number, Inode *node)
 {
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
