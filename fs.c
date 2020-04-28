@@ -51,6 +51,16 @@ void update_Bmap(){
 
 }
 
+bool fs_save_inode(FileSystem *fs, size_t inode_number, Inode *node)
+{
+	union fs_block block;
+	int block_number = inode_number / INODES_PER_BLOCK + 1;
+	int inode_index = inode_number % INODES_PER_BLOCK;
+	disk_read(block_number,block)
+	if(!block.inode[localIndex].isvalid) return 0;
+	disk_write(block_number,node);
+}
+
 void initialize_free_block_bitmap(struct FileSystem * fs){
 
 	// check that filesytem is valid	
