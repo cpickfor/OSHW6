@@ -333,7 +333,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 	disk_read(block_of_inode, block.data);
 
-	int inode_offset = (inumber % INODES_PER_BLOCK) - 1;
+	int inode_offset = inumber % INODES_PER_BLOCK;
 
 
 	struct fs_inode ind = block.inode[inode_offset];  // TODO dont forget to write to disk
