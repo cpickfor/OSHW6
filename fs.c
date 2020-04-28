@@ -51,6 +51,66 @@ void update_Bmap(){
 
 }
 
+int fs_read(int inode_number, char *data, int length, int offset)
+{
+	if(length == 0){return 0;}
+	union fs_block block;
+	int block_number = inode_number / INODES_PER_BLOCK + 1;
+	int inode_index = inode_number % INODES_PER_BLOCK;
+	disk_read(block_number,block.data);
+	if(!block.inode[inode_index].isvalid) return -1;
+
+	struct fs_inode node = block.inode[inode_index];
+	if(length+offset > node.size){return -1;}
+
+	int bytes_read = 0;
+	int bytes_seen = 0;
+	//go through all direct pointers
+	for(int i = 0; i < POINTERS_PER_INODE; i++)
+	{
+		int block_num = node.direct[i];
+		union fs_block data_block;
+		disk_read(block_num,data_block.data); //read data block
+		//read data block
+		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
+		{
+			if(bytes_seen >= offset)
+			{
+				data[bytes_read] = data_block.data[i];
+				bytes_read++;
+				if(bytes_read == length){return bytes_read;}
+			}
+			bytes_seen++;
+		}
+	}
+	//go through indirect pointers
+	int indirect_num = node.indirect;
+	union fs_block indirect_block;
+	disk_read(indirect_num,indirect_block.data);
+	for(int i = 0; i < POINTERS_PER_BLOCK; i++)
+	{
+		int data_block_num = indirect_block.pointers[i];
+		union fs_block in_data_block;
+		disk_read(data_block_num,in_data_block.data);
+		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
+		{
+			if(bytes_seen >= offset)
+			{
+				data[bytes_read] = in_data_block.data[i];
+				bytes_read++;
+				if(bytes_read == length){return bytes_read;}
+			}
+			bytes_seen++;
+		}
+	}
+
+
+
+	return bytes_read;
+
+
+}
+
 int fs_create()
 {
 	struct fs_inode node;
@@ -76,16 +136,16 @@ int fs_create()
 	return 0;
 }
 
-bool fs_save_inode(size_t inode_number, struct fs_inode *node)
+void fs_save_inode(int inode_number, struct fs_inode *node)
 {
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
 	disk_read(block_number,block.data);
-	if(!block.inode[inode_index].isvalid) return 0;
-	block[inode_index] = node;	//expression must have pointer-to-object type idk whats happening here
+	if(!block.inode[inode_index].isvalid) return;
+	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
 	disk_write(block_number,block.data);
-	return 1;
+	return;
 }
 
 void initialize_free_block_bitmap(struct FileSystem * fs){
@@ -298,25 +358,6 @@ int fs_getsize( int inumber )
 	return block.inode[inode_offset].size;
 }
 
-int fs_read( int inumber, char *data, int length, int offset )
-{	
-	union fs_block block;
-	int block_number = inumber / INODES_PER_BLOCK + 1;
-	int inode_index = inumber % INODES_PER_BLOCK;
-	disk_read(block_number,block.data);
-	if(!block.inode[inode_index].isvalid) return -1;
-
-	char block_data[DISK_BLOCK_SIZE] = block[inode_index];	//expression must have pointer-to-object type same issue as line 86
-	if(length+offset > DISK_BLOCK_SIZE){return -1;}
-
-	ssize_t bytes_read = 0;
-	for(int i = offset; i < length; i++)
-	{
-		data[bytes_read] = block_data[i];
-		bytes_read++;
-	}
-	return bytes_read;
-}
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {	
