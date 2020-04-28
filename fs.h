@@ -8,8 +8,6 @@ int  fs_mount();
 int  fs_create();
 int  fs_delete( int inumber );
 int  fs_getsize();
-bool fs_save_inode(size_t inode_number, Inode *node);
-
 
 int  fs_read( int inumber, char *data, int length, int offset );
 int  fs_write( int inumber, const char *data, int length, int offset );

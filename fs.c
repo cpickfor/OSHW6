@@ -51,39 +51,17 @@ void update_Bmap(){
 
 }
 
-ssize_t fs_read(size_t inode_number, char *data, size_t length, size_t offset)
-{
-	union fs_block block;
-	int block_number = inode_number / INODES_PER_BLOCK + 1;
-	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block);
-	if(!block.inode[inode_index].isvalid) return -1;
-
-	char block_data[DISK_BLOCK_SIZE] = block[inode_index];
-	if(length+offset > DISK_BLOCK_SIZE){return -1;}
-
-	ssize_t bytes_read = 0;
-	for(int i = offset; i < length; i++)
-	{
-		data[bytes_read] = block_data[i];
-		bytes_read++;
-	}
-	return bytes_read;
-
-
-}
-
 int fs_create()
 {
 	struct fs_inode node;
 	union fs_block block;
 	node.size = 0;
-	node.valid = 1
+	node.isvalid = 1;
 	//check through every block
 	for(int i = 1; i < fs->sb.nblocks; i++)
 	{
 		//ready block
-		disk_read(i,block);
+		disk_read(i,block.data);
 		//check through every inode
 		for(int j = 0; j < INODES_PER_BLOCK; j++)
 		{
@@ -98,15 +76,15 @@ int fs_create()
 	return 0;
 }
 
-bool fs_save_inode(size_t inode_number, Inode *node)
+bool fs_save_inode(size_t inode_number, struct fs_inode *node)
 {
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block);
+	disk_read(block_number,block.data);
 	if(!block.inode[inode_index].isvalid) return 0;
-	block[inode_index] = node;
-	disk_write(block_number,block);
+	block[inode_index] = node;	//expression must have pointer-to-object type idk whats happening here
+	disk_write(block_number,block.data);
 	return 1;
 }
 
@@ -321,8 +299,23 @@ int fs_getsize( int inumber )
 }
 
 int fs_read( int inumber, char *data, int length, int offset )
-{
-	return 0;
+{	
+	union fs_block block;
+	int block_number = inumber / INODES_PER_BLOCK + 1;
+	int inode_index = inumber % INODES_PER_BLOCK;
+	disk_read(block_number,block.data);
+	if(!block.inode[inode_index].isvalid) return -1;
+
+	char block_data[DISK_BLOCK_SIZE] = block[inode_index];	//expression must have pointer-to-object type same issue as line 86
+	if(length+offset > DISK_BLOCK_SIZE){return -1;}
+
+	ssize_t bytes_read = 0;
+	for(int i = offset; i < length; i++)
+	{
+		data[bytes_read] = block_data[i];
+		bytes_read++;
+	}
+	return bytes_read;
 }
 
 int fs_write( int inumber, const char *data, int length, int offset )
