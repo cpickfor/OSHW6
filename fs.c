@@ -63,7 +63,7 @@ ssize_t fs_read(size_t inode_number, char *data, size_t length, size_t offset)
 	if(length+offset > DISK_BLOCK_SIZE){return -1;}
 
 	ssize_t bytes_read = 0;
-	for(int i = offset, i < length; i++)
+	for(int i = offset; i < length; i++)
 	{
 		data[bytes_read] = block_data[i];
 		bytes_read++;
