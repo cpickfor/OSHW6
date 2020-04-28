@@ -38,6 +38,18 @@ union fs_block {
 	char data[DISK_BLOCK_SIZE];
 };
 
+void update_Bmap(){
+	union fs_block block;
+	union fs_block inodeBlk;
+
+	//read disk
+	for(int i = 0; i < disk_size(); i++){
+		disk_read(i,block.data); //reading blocks
+
+	}
+
+}
+
 int fs_format()
 {
 	return 0;
@@ -107,7 +119,7 @@ int fs_mount()
 	if(!allocate_bitmap) return 0;
 	inode_blocks = block.super.ninodeblocks;
 	//Update bitmap function
-	//update_Bmap();
+	update_Bmap();
 
 
 	return 0;
@@ -120,7 +132,15 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+	union fs_block block;
+
+	if(inumber > inode_blocks*INODES_PER_BLOCK - 1 || inumber < 0) return 0; //impossible inodes fails automatically
+
 	//read block
+	int iblk = inumber/INODES_PER_BLOCK + 1; //get block number for inode
+	int localIndex = inumber%INODES_PER_BLOCK; //get local index for inode
+	
+
 	//iterate through pointers
 	//update bitmap for specific block to be 0 when pointer found
 	return 0;
