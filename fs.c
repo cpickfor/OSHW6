@@ -51,6 +51,28 @@ void update_Bmap(){
 
 }
 
+ssize_t fs_read(size_t inode_number, char *data, size_t length, size_t offset)
+{
+	union fs_block block;
+	int block_number = inode_number / INODES_PER_BLOCK + 1;
+	int inode_index = inode_number % INODES_PER_BLOCK;
+	disk_read(block_number,block);
+	if(!block.inode[inode_index].isvalid) return -1;
+
+	char block_data[DISK_BLOCK_SIZE] = block[inode_index];
+	if(length+offset > DISK_BLOCK_SIZE){return -1;}
+
+	ssize_t bytes_read = 0;
+	for(int i = offset, i < length; i++)
+	{
+		data[bytes_read] = block_data[i];
+		bytes_read++;
+	}
+	return bytes_read;
+
+
+}
+
 int fs_create()
 {
 	struct fs_inode node;
