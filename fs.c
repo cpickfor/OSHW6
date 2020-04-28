@@ -41,13 +41,51 @@ int fs_format()
 void fs_debug()
 {
 	union fs_block block;
-
+	union fs_block temp;
+	union fs_block indirect;
+	
 	disk_read(0,block.data);
 
 	printf("superblock:\n");
 	printf("    %d blocks\n",block.super.nblocks);
 	printf("    %d inode blocks\n",block.super.ninodeblocks);
 	printf("    %d inodes\n",block.super.ninodes);
+	
+    	for(int i = 1; i <= block.super.ninodeblocks; i++) {	//loop through inode blocks
+        disk_read(i,temp.data);
+        
+        for(int j = 0; j < INODES_PER_BLOCK; j++) {	//loop through inodes
+            if(temp.inode[j].isvalid == 1) {	//print if inode is valid
+                int inumber = (i-1)*INODES_PER_BLOCK + j;
+                printf("inode %d\n", inumber);
+                printf("    size: %d bytes\n", temp.inode[j].size);
+		if(temp.inode[j].size == 0){
+			return;
+		}
+                
+		printf("    direct blocks:");
+                for(int k = 0; k < POINTERS_PER_INODE; k++) {	//loop through direct pointers
+                    if(temp.inode[j].direct[k] != 0) {
+                        printf(" %d", temp.inode[j].direct[k]);
+                    }
+                }
+                printf("\n");
+		
+                if(temp.inode[j].indirect != 0) {	//inderect block
+                    printf("    indirect block: %d\n", temp.inode[j].indirect);
+                    disk_read(temp.inode[j].indirect, indirect.data);
+		
+                    printf("    indirect data blocks:");
+                    for(int x = 0; x < POINTERS_PER_BLOCK; x++) {	//loop through indirect data blocks
+                        if(indirect.pointers[x] != 0) {
+                            printf(" %d", indirect.pointers[x]);
+                        }
+                    }
+                    printf("\n");
+                }
+            }
+        }
+    }
 }
 
 int fs_mount()
