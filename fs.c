@@ -246,6 +246,7 @@ int fs_mount()
 int fs_delete( int inumber )
 {
 	union fs_block block;
+	union fs_block in_block;
 
 	if(inumber > inode_blocks*INODES_PER_BLOCK - 1 || inumber < 0) return 0; //impossible inodes fails automatically
 
@@ -256,10 +257,43 @@ int fs_delete( int inumber )
 	//read block
 	disk_read(blk, block.data);
 
-	//Check inumber validity
+	//Check validity
 	if(!block.inode[localIndex].isvalid) return 0;
-	//iterate through pointers
-	//update bitmap for specific block to be 0 when pointer found
+	//iterate through direct pointers
+	for(int i=0;i<POINTERS_PER_INODE;i++){
+		if(!block.inode[localIndex].direct[i]) continue;
+		allocate_bitmap[block.inode[localIndex].direct[i]] = 0;
+	}
+	//iterate through indirect pointers
+	if(block.inode[localIndex].indirect){	
+		disk_read(block.inode[localIndex].indirect, in_block.data);
+		for(int j=0; j<POINTERS_PER_BLOCK; j++){
+			if(!in_block.pointers[j]) continue;
+			allocate_bitmap[in_block.pointers[j]] = 0;
+		}
+	}
+
+	//size update
+	block.inode[localIndex].size = 0;
+
+	//invalidate inode
+	block.inode[localIndex].isvalid = 0;
+
+	//Check all inodes in inode block for any valid inode
+	int foundValidInode = 0;
+	for(int k=0; k<INODES_PER_BLOCK; k++){
+		if(block.inode[k].isvalid){
+			foundValidInode = 1;
+			break;
+		}
+	}
+
+	//invalidate block
+	if(!foundValidInode) allocate_bitmap[blk] = 0;
+	
+	//write to disk
+	disk_write(blk, block.data);
+	
 	return 0;
 }
 
