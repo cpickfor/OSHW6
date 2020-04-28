@@ -51,6 +51,27 @@ void update_Bmap(){
 
 }
 
+int fs_create()
+{
+	struct fs_inode node;
+	union fs_block block;
+	node.size = 0;
+	node.valid = 1
+	for(int i = 1; i < fs->sb.nblocks; i++)
+	{
+		disk_read(i,block);
+		for(int j = 0; j < INODES_PER_BLOCK; j++)
+		{
+			if(!block.inode[j].isvalid)
+			{
+				block.inode[j] = node;
+				return i*INODES_PER_BLOCK+j;
+			}
+		}
+	}
+	return 0;
+}
+
 bool fs_save_inode(size_t inode_number, Inode *node)
 {
 	union fs_block block;
@@ -192,10 +213,7 @@ int fs_mount()
 	return 0;
 }
 
-int fs_create()
-{
-	return 0;
-}
+
 
 int fs_delete( int inumber )
 {
