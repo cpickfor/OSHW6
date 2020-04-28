@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define FS_MAGIC           0xf0f03410
 #define INODES_PER_BLOCK   128
@@ -38,18 +39,46 @@ union fs_block {
 	char data[DISK_BLOCK_SIZE];
 };
 
-void update_Bmap(){
-	union fs_block block;
-	union fs_block inodeBlk;
+struct FileSystem {
+	struct fs_superblock sb;
+	bool * free_blocks;
+};
 
-	//read disk
-	for(int i = 0; i < disk_size(); i++){
-		disk_read(i,block.data); //reading blocks
+void initialize_free_block_bitmap(struct FileSystem * fs){
 
+	// check that filesytem is valid	
+	if(fs->sb.magic != FS_MAGIC){
+		printf("fs: Error initializing free block bitmap.\n");
+		exit(1);
 	}
 
+	// allocate free block bitmap
+	fs->free_blocks = calloc(fs->sb.nblocks,sizeof(bool));
+
+	// give error if allocating memory fails
+	if(!fs->free_blocks) {
+		printf("fs: Error allocating memory for free block bitmap.\n");
+		exit(1);
+	}
 }
 
+ssize_t allocate_free_block(struct FileSystem * fs){
+
+	// look for free block
+	for (ssize_t i = 0; i < fs->sb.nblocks; i++){
+		if(!fs->free_blocks[i]){
+			fs->free_blocks[i] = true;
+			return i;
+		}
+	}
+
+	// no free blocks	
+	return -1;
+}
+
+
+
+>>>>>>> 26a87c6f7ad6a4101af23b17e6b04c3ce680b028
 int fs_format()
 {
 	return 0;
@@ -139,7 +168,7 @@ int fs_delete( int inumber )
 	//read block
 	int iblk = inumber/INODES_PER_BLOCK + 1; //get block number for inode
 	int localIndex = inumber%INODES_PER_BLOCK; //get local index for inode
-	
+
 
 	//iterate through pointers
 	//update bitmap for specific block to be 0 when pointer found
