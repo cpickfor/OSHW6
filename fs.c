@@ -105,7 +105,8 @@ bool fs_save_inode(size_t inode_number, Inode *node)
 	int inode_index = inode_number % INODES_PER_BLOCK;
 	disk_read(block_number,block);
 	if(!block.inode[inode_index].isvalid) return 0;
-	disk_write(block_number,node);
+	block[inode_index] = node;
+	disk_write(block_number,block);
 	return 1;
 }
 
