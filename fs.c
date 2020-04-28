@@ -76,7 +76,7 @@ int fs_read(int inode_number, char *data, int length, int offset)
 		{
 			if(bytes_seen >= offset)
 			{
-				data[bytes_read] = block_data[i];
+				data[bytes_read] = data_block.data[i];
 				bytes_read++;
 				if(bytes_read == length){return bytes_read;}
 			}
@@ -84,7 +84,28 @@ int fs_read(int inode_number, char *data, int length, int offset)
 		}
 	}
 	//go through indirect pointers
-	
+	int indirect_num = node.indirect;
+	union fs_block indirect_block;
+	disk_read(indirect_num,indirect_block.data);
+	for(int i = 0; i < POINTERS_PER_BLOCK; i++)
+	{
+		int data_block_num = indirect_block.pointers[i];
+		union fs_block in_data_block;
+		disk_read(data_block_num,in_data_block.data);
+		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
+		{
+			if(bytes_seen >= offset)
+			{
+				data[bytes_read] = in_data_block.data[i];
+				bytes_read++;
+				if(bytes_read == length){return bytes_read;}
+			}
+			bytes_seen++;
+		}
+	}
+
+
+
 	return bytes_read;
 
 
@@ -95,12 +116,12 @@ int fs_create()
 	struct fs_inode node;
 	union fs_block block;
 	node.size = 0;
-	node.valid = 1
+	node.isvalid = 1;
 	//check through every block
 	for(int i = 1; i < fs->sb.nblocks; i++)
 	{
 		//ready block
-		disk_read(i,block);
+		disk_read(i,block.data);
 		//check through every inode
 		for(int j = 0; j < INODES_PER_BLOCK; j++)
 		{
@@ -120,10 +141,11 @@ void fs_save_inode(int inode_number, struct fs_inode *node)
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block);
+	disk_read(block_number,block.data);
 	if(!block.inode[inode_index].isvalid) return;
-	block[inode_index] = node;
-	disk_write(block_number,block);
+	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
+	disk_write(block_number,block.data);
+	return;
 }
 
 void initialize_free_block_bitmap(struct FileSystem * fs){
@@ -336,10 +358,6 @@ int fs_getsize( int inumber )
 	return block.inode[inode_offset].size;
 }
 
-int fs_read( int inumber, char *data, int length, int offset )
-{
-	return 0;
-}
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {	
