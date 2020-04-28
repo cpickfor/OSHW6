@@ -12,6 +12,11 @@
 #define POINTERS_PER_INODE 5
 #define POINTERS_PER_BLOCK 1024
 
+int inode_blocks;
+int *allocate_bitmap;
+int mounted = 0;
+
+
 struct fs_superblock {
 	int magic;
 	int nblocks;
@@ -90,6 +95,21 @@ void fs_debug()
 
 int fs_mount()
 {
+	//Read 0 block from disk
+	union fs_block block;
+	disk_read(0,block.data);
+	//Check for magic number
+	if(block.super.magic != FS_MAGIC) return 0;
+	//say if mounted
+	mounted = 1;
+	//Allocate bitmap (calloc)
+	allocate_bitmap = calloc(block.super.nblocks,sizeof(int));
+	if(!allocate_bitmap) return 0;
+	inode_blocks = block.super.ninodeblocks;
+	//Update bitmap function
+	//update_Bmap();
+
+
 	return 0;
 }
 
@@ -100,6 +120,9 @@ int fs_create()
 
 int fs_delete( int inumber )
 {
+	//read block
+	//iterate through pointers
+	//update bitmap for specific block to be 0 when pointer found
 	return 0;
 }
 
