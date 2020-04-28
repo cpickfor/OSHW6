@@ -44,6 +44,10 @@ struct FileSystem {
 	bool * free_blocks;
 };
 
+void update_Bmap(){
+
+}
+
 void initialize_free_block_bitmap(struct FileSystem * fs){
 
 	// check that filesytem is valid	
@@ -77,8 +81,6 @@ ssize_t allocate_free_block(struct FileSystem * fs){
 }
 
 
-
->>>>>>> 26a87c6f7ad6a4101af23b17e6b04c3ce680b028
 int fs_format()
 {
 	return 0;
@@ -165,11 +167,15 @@ int fs_delete( int inumber )
 
 	if(inumber > inode_blocks*INODES_PER_BLOCK - 1 || inumber < 0) return 0; //impossible inodes fails automatically
 
-	//read block
-	int iblk = inumber/INODES_PER_BLOCK + 1; //get block number for inode
+	//find location
+	int blk = inumber/INODES_PER_BLOCK + 1; //get block number for inode
 	int localIndex = inumber%INODES_PER_BLOCK; //get local index for inode
 
+	//read block
+	disk_read(blk, block.data);
 
+	//Check inumber validity
+	if(!block.inode[localIndex].isvalid) return 0;
 	//iterate through pointers
 	//update bitmap for specific block to be 0 when pointer found
 	return 0;
