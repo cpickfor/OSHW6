@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #define FS_MAGIC           0xf0f03410
 #define INODES_PER_BLOCK   128
@@ -32,6 +33,45 @@ union fs_block {
 	int pointers[POINTERS_PER_BLOCK];
 	char data[DISK_BLOCK_SIZE];
 };
+
+struct FileSystem {
+	struct fs_superblock sb;
+	bool * free_blocks;
+};
+
+void initialize_free_block_bitmap(struct FileSystem * fs){
+
+	// check that filesytem is valid	
+	if(fs->sb.magic != FS_MAGIC){
+		printf("fs: Error initializing free block bitmap.\n");
+		exit(1);
+	}
+
+	// allocate free block bitmap
+	fs->free_blocks = calloc(fs->sb.nblocks,sizeof(bool));
+
+	// give error if allocating memory fails
+	if(!fs->free_blocks) {
+		printf("fs: Error allocating memory for free block bitmap.\n");
+		exit(1);
+	}
+}
+
+ssize_t allocate_free_block(struct FileSystem * fs){
+
+	// look for free block
+	for (ssize_t i = 0; i < fs->sb.nblocks; i++){
+		if(!fs->free_blocks[i]){
+			fs->free_blocks[i] = true;
+			return i;
+		}
+	}
+
+	// no free blocks	
+	return -1;
+}
+
+
 
 int fs_format()
 {
