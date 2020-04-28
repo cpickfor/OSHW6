@@ -44,6 +44,8 @@ struct FileSystem {
 	bool * free_blocks;
 };
 
+struct FileSystem * fs;
+
 void update_Bmap(){
 
 }
@@ -183,7 +185,25 @@ int fs_delete( int inumber )
 
 int fs_getsize( int inumber )
 {
-	return -1;
+	union fs_block block;
+
+	if(inumber > fs->sb.ninodes){
+		printf("fs: Invalid inode number.\n");
+		return -1;
+	}
+
+	int block_of_inode = (inumber/INODES_PER_BLOCK) + 1;
+
+	disk_read(block_of_inode, block.data);
+
+	int inode_offset = (inumber % INODES_PER_BLOCK) - 1;
+
+	if(block.inode[inode_offset].isvalid == 0){
+		printf("fs: inode is invalid.\n");
+		return -1;
+	}	
+
+	return block.inode[inode_offset].size;
 }
 
 int fs_read( int inumber, char *data, int length, int offset )
@@ -192,6 +212,122 @@ int fs_read( int inumber, char *data, int length, int offset )
 }
 
 int fs_write( int inumber, const char *data, int length, int offset )
-{
+{	
+	union fs_block block;
+	union fs_block temp;
+	union fs_block indirect;
+
+	if(inumber > fs->sb.ninodes){
+		printf("fs: Invalid inode number.\n");
+		return 0;
+	}
+
+	int block_of_inode = (inumber / INODES_PER_BLOCK) + 1;
+
+	disk_read(block_of_inode, block.data);
+
+	int inode_offset = (inumber % INODES_PER_BLOCK) - 1;
+
+
+	struct fs_inode ind = block.inode[inode_offset];  // TODO dont forget to write to disk
+	size_t bytes_written = 0;
+	
+	if(ind.isvalid == 0){
+		ind.isvalid = 1;
+		ind.size    = 0;
+
+		int free_block;
+		int numblocks          = (length / DISK_BLOCK_SIZE) + 1;
+		int direct_ptrs_used   = 0;
+		int indirect_ptrs_used = 0;
+		bool indirect_used      = false;
+
+		while(numblocks > 0){
+
+			if(direct_ptrs_used < POINTERS_PER_INODE){
+				
+				free_block = allocate_free_block(fs);
+				if(free_block == -1){
+					printf("fs: Cannot allocate a block.\n");
+					return 0;
+				}
+
+				ind.direct[direct_ptrs_used] = free_block;
+
+				if(numblocks-1 == 0){
+					for(int i = 0; i < length - bytes_written; i++){
+						temp.data[i] = data[i + offset + bytes_written];
+					}		
+					disk_write(free_block,temp.data);
+					bytes_written += length - bytes_written;
+					ind.size += length - bytes_written;	
+				}else{
+					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
+						temp.data[i] = data[i + offset + bytes_written];
+					}		
+					disk_write(free_block,temp.data);
+					bytes_written += DISK_BLOCK_SIZE;
+					ind.size += DISK_BLOCK_SIZE;
+				}
+				numblocks--;
+				direct_ptrs_used++;
+
+			}else if (indirect_ptrs_used < POINTERS_PER_BLOCK){
+
+				if (!indirect_used)	{
+					free_block = allocate_free_block(fs);
+					if(free_block == -1){
+						printf("fs: Cannot allocate a block.\n");
+						return 0;
+					}
+					ind.indirect = free_block; 
+				}
+				
+				free_block = allocate_free_block(fs);
+				if(free_block == -1){
+					printf("fs: Cannot allocate a block.\n");
+					return 0;
+				}
+				
+				indirect.pointers[indirect_ptrs_used] = free_block;
+
+				if(numblocks-1 == 0){
+					for(int i = 0; i < length - bytes_written; i++){
+						temp.data[i] = data[i + offset + bytes_written];
+					}		
+					disk_write(free_block,temp.data);
+					bytes_written += length - bytes_written;
+					ind.size += length - bytes_written;	
+					
+				}else{
+					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
+						temp.data[i] = data[i + offset + bytes_written];
+					}		
+					disk_write(free_block,temp.data);
+					bytes_written += DISK_BLOCK_SIZE;
+					ind.size += DISK_BLOCK_SIZE;
+				}
+				
+				indirect_ptrs_used++;
+				numblocks--;
+			}else{
+				printf("All of inodes used\n");
+				return bytes_written; // TODO return 0 on error
+			}
+
+			numblocks--;	
+		}
+		
+		block.inode[inode_offset] = ind;
+		disk_write(block_of_inode,block.data);
+
+		if(indirect_used) disk_write(ind.indirect, indirect.data);
+
+	}else{
+		// TODO can inode be valid ?
+	}
+		
+	
+	
 	return 0;
 }
