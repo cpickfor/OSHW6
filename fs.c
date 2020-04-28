@@ -57,11 +57,15 @@ int fs_create()
 	union fs_block block;
 	node.size = 0;
 	node.valid = 1
+	//check through every block
 	for(int i = 1; i < fs->sb.nblocks; i++)
 	{
+		//ready block
 		disk_read(i,block);
+		//check through every inode
 		for(int j = 0; j < INODES_PER_BLOCK; j++)
 		{
+			//if inode is not valid then assign to created node
 			if(!block.inode[j].isvalid)
 			{
 				block.inode[j] = node;
@@ -77,9 +81,10 @@ bool fs_save_inode(size_t inode_number, Inode *node)
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block)
-	if(!block.inode[localIndex].isvalid) return 0;
+	disk_read(block_number,block);
+	if(!block.inode[inode_index].isvalid) return 0;
 	disk_write(block_number,node);
+	return 1;
 }
 
 void initialize_free_block_bitmap(struct FileSystem * fs){
