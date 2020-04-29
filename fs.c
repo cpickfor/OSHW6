@@ -107,52 +107,62 @@ int fs_read(int inode_number, char *data, int length, int offset)
     }
 	if(length == 0 || inode_number == 0){return 0;}
 	union fs_block block;
+	char chunk_data[4096];
+	memset(chunk_data,'\0',4096);
+	char all_data [4096*4];
+	memset(all_data,'\0',4096*4);
+
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
 	disk_read(block_number,block.data);
 	if(!block.inode[inode_index].isvalid) return -1;
 
 	struct fs_inode node = block.inode[inode_index];
-	if(length+offset > node.size){return -1;}
+	if(length+offset > node.size || !node.isvalid){return -1;}
 
 	int bytes_read = 0;
-	int bytes_seen = 0;
+	int bytes_left = node.size-offset;
+	if(node.size-offset < length){bytes_left = length;}//if there is not enough data to copy just grab till end
 	//go through all direct pointers
 	for(int i = 0; i < POINTERS_PER_INODE; i++)
 	{
 		int block_num = node.direct[i];
-		union fs_block data_block;
-		disk_read(block_num,data_block.data); //read data block
-		//read data block
-		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
+		disk_read(block_num,*(&chunk_data)); //read data block
+		strcat(*(&all_data),*(&chunk_data));//append chunk to sum
+		if(bytes_left-bytes_read < 4096)
 		{
-			if(bytes_seen >= offset)
-			{
-				data[bytes_read] = data_block.data[i];
-				bytes_read++;
-				if(bytes_read == length){return bytes_read;}
-			}
-			bytes_seen++;
+			bytes_read += bytes_left-bytes_read;
+		}
+		else{bytes_read+=4096;}
+
+		if(bytes_read >= bytes_left)
+		{
+			strncpy(data,all_data,bytes_read);
+			return bytes_read;
 		}
 	}
 	//go through indirect pointers
 	int indirect_num = node.indirect;
+	int pointers_per_offset = offset/4096;
 	union fs_block indirect_block;
 	disk_read(indirect_num,indirect_block.data);
-	for(int i = 0; i < POINTERS_PER_BLOCK; i++)
+	int i = 0;
+	if(pointers_per_offset >= 5){i = pointers_per_offset-5;}
+	for(; i < POINTERS_PER_BLOCK; i++)
 	{
 		int data_block_num = indirect_block.pointers[i];
-		union fs_block in_data_block;
-		disk_read(data_block_num,in_data_block.data);
-		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
+		disk_read(data_block_num,*(&chunk_data));
+		strcat(*(&all_data),*(&chunk_data));
+		if(bytes_left-bytes_read < 4096)
 		{
-			if(bytes_seen >= offset)
-			{
-				data[bytes_read] = in_data_block.data[i];
-				bytes_read++;
-				if(bytes_read == length){return bytes_read;}
-			}
-			bytes_seen++;
+			bytes_read += bytes_left-bytes_read;
+		}
+		else{bytes_read+=4096;}
+
+		if(bytes_read >= bytes_left)
+		{
+			strncpy(data,all_data,bytes_read);
+			return bytes_read;
 		}
 	}
 
