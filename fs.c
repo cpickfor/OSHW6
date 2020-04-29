@@ -48,7 +48,41 @@ struct FileSystem {
 struct FileSystem * fs;
 
 void update_Bmap(){
+	union fs_block block;
+	union fs_block indirect_block;
 
+	for (int i = 0; i < disk_size(); i++) {
+		//read
+		disk_read(i, block.data);
+		//check superblock magic number
+		if (!i) {
+			allocate_bitmap[0] = (block.super.magic == FS_MAGIC) ? 1 : 0;
+		}
+		else if (i <= inode_blocks) {//inode blocks
+			//loop through inodes
+			int foundValid = 0;
+			for (int j = 0; j < INODES_PER_BLOCK; j++) {
+				//check validity
+				if (block.inode[j].isvalid) {
+					allocate_bitmap[i] = 1;
+					foundValid = 1;
+					//direct pointers
+					for (int k = 0; k < POINTERS_PER_INODE; k++) {
+						if(block.inode[j].direct[k]) allocate_bitmap[block.inode[j].direct[k]] = 1;
+					}
+					//indirect pointer
+					if (block.inode[j].indirect) {
+						//read
+						disk_read(block.inode[j].indirect, indirect_block.data);
+						for (int m = 0; m < POINTERS_PER_BLOCK; m++) {
+							if(indirect_block.pointers[m]) allocate_bitmap[indirect_block.pointers[m]] = 1;
+						}
+					}
+				}
+			}
+			if(!foundValid) allocate_bitmap[i] = 0;
+		}
+	}
 }
 
 void fs_save_inode(int inode_number, struct fs_inode *node)
@@ -58,13 +92,25 @@ void fs_save_inode(int inode_number, struct fs_inode *node)
 	int inode_index = inode_number % INODES_PER_BLOCK;
 	disk_read(block_number,block.data);
 	if(!block.inode[inode_index].isvalid) return;
-	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
+	block.inode[inode_index] = *node;	//expression must have pointer-to-object type
 	disk_write(block_number,block.data);
 	return;
 }
 
+void inode_load( int inumber, struct fs_inode *inode) {
+	union fs_block block;
+    int block_number = inumber / INODES_PER_BLOCK + 1;
+    int inode_index = inumber % INODES_PER_BLOCK;
+    disk_read(block_number, block.data);
+    *inode = block.inode[inode_index];
+}
+
 int fs_read(int inode_number, char *data, int length, int offset)
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	if(length == 0){return 0;}
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
@@ -125,15 +171,27 @@ int fs_read(int inode_number, char *data, int length, int offset)
 
 int fs_create()
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
+
+
 	struct fs_inode node;
 	union fs_block block;
+	union fs_block supB;
+
+	disk_read(0,supB.data);//read super block
+
 	node.size = 0;
 	node.isvalid = 1;
 	//check through every block
-	for(int i = 1; i < fs->sb.nblocks; i++)
+	for(int i = 1; i < supB.super.nblocks; i++)
 	{
 		//ready block
+
 		disk_read(i,block.data);
+
 		//check through every inode
 		for(int j = 0; j < INODES_PER_BLOCK; j++)
 		{
@@ -186,11 +244,16 @@ ssize_t allocate_free_block(struct FileSystem * fs){
 int fs_format()
 {
 	//check if mounted
+	if(mounted) {
+        printf("Disk is already mounted\n");
+        return 0;
+    }
 	
 	union fs_block block;
 	disk_read(0,block.data);
 	int nblocks = disk_size();
 	int ninodeblocks = ceil(nblocks/10);
+	if(ninodeblocks == 0) ninodeblocks = 1;
 
 	for(int i = 1; i <= block.super.ninodeblocks; i++) {
         union fs_block inode;
@@ -205,7 +268,7 @@ int fs_format()
 	superblock.super.magic = FS_MAGIC;
 	superblock.super.nblocks = nblocks;
 	superblock.super.ninodeblocks = ninodeblocks;
-	superblock.super.ninodes = INODES_PER_BLOCK;
+	superblock.super.ninodes = (ninodeblocks * INODES_PER_BLOCK);
     disk_write(0,superblock.data);
 
     return 1;
@@ -276,15 +339,19 @@ int fs_mount()
 	inode_blocks = block.super.ninodeblocks;
 	//Update bitmap function
 	update_Bmap();
+	mounted = 1;
 
-
-	return 0;
+	return 1;
 }
 
 
 
 int fs_delete( int inumber )
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 	union fs_block in_block;
 
@@ -334,11 +401,15 @@ int fs_delete( int inumber )
 	//write to disk
 	disk_write(blk, block.data);
 	
-	return 0;
+	return 1;
 }
 
 int fs_getsize( int inumber )
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 
 	if(inumber > fs->sb.ninodes){
@@ -363,6 +434,10 @@ int fs_getsize( int inumber )
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {	
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 	union fs_block temp;
 	union fs_block indirect;
