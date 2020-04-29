@@ -92,7 +92,7 @@ void fs_save_inode(int inode_number, struct fs_inode *node)
 	int inode_index = inode_number % INODES_PER_BLOCK;
 	disk_read(block_number,block.data);
 	if(!block.inode[inode_index].isvalid) return;
-	block.inode[inode_index] = *node;	//expression must have pointer-to-object type idk whats happening here
+	block.inode[inode_index] = *node;	//expression must have pointer-to-object type
 	disk_write(block_number,block.data);
 	return;
 }
@@ -107,6 +107,10 @@ void inode_load( int inumber, struct fs_inode *inode) {
 
 int fs_read(int inode_number, char *data, int length, int offset)
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	if(length == 0){return 0;}
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
@@ -167,6 +171,10 @@ int fs_read(int inode_number, char *data, int length, int offset)
 
 int fs_create()
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	struct fs_inode node;
 	union fs_block block;
 	node.size = 0;
@@ -228,6 +236,10 @@ ssize_t allocate_free_block(struct FileSystem * fs){
 int fs_format()
 {
 	//check if mounted
+	if(mounted) {
+        printf("Disk is already mounted\n");
+        return 0;
+    }
 	
 	union fs_block block;
 	disk_read(0,block.data);
@@ -327,6 +339,10 @@ int fs_mount()
 
 int fs_delete( int inumber )
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 	union fs_block in_block;
 
@@ -381,6 +397,10 @@ int fs_delete( int inumber )
 
 int fs_getsize( int inumber )
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 
 	if(inumber > fs->sb.ninodes){
@@ -405,6 +425,10 @@ int fs_getsize( int inumber )
 
 int fs_write( int inumber, const char *data, int length, int offset )
 {	
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
 	union fs_block block;
 	union fs_block temp;
 	union fs_block indirect;
