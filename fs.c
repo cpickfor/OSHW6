@@ -318,9 +318,9 @@ int fs_mount()
 	inode_blocks = block.super.ninodeblocks;
 	//Update bitmap function
 	update_Bmap();
+	mounted = 1;
 
-
-	return 0;
+	return 1;
 }
 
 
@@ -376,7 +376,7 @@ int fs_delete( int inumber )
 	//write to disk
 	disk_write(blk, block.data);
 	
-	return 0;
+	return 1;
 }
 
 int fs_getsize( int inumber )
