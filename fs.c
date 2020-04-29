@@ -175,12 +175,14 @@ int fs_create()
         printf("Filesystem is not mounted\n");
         return 0;
     }
+
+
 	struct fs_inode node;
 	union fs_block block;
 	node.size = 0;
 	node.isvalid = 1;
 	//check through every block
-	for(int i = 1; i < fs->sb.nblocks; i++)
+	for(int i = 1; i < disk_size(); i++)
 	{
 		//ready block
 		disk_read(i,block.data);
