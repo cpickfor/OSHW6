@@ -367,7 +367,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	union fs_block temp;
 	union fs_block indirect;
 
-	if(inumber > fs->sb.ninodes){
+	if(inumber > fs->sb.ninodes || inumber < 1){
 		printf("fs: Invalid inode number.\n");
 		return 0;
 	}
@@ -381,17 +381,110 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 	struct fs_inode ind = block.inode[inode_offset];  // TODO dont forget to write to disk
 	size_t bytes_written = 0;
-	
+
 	if(ind.isvalid == 0){
-		ind.isvalid = 1;
-		ind.size    = 0;
-
+		printf("fs: inode is invalid.\n");
+		return 0;
+	}
+	
+	if(ind.isvalid == 1){
+		
 		int free_block;
-		int numblocks          = (length / DISK_BLOCK_SIZE) + 1;
-		int direct_ptrs_used   = 0;
-		int indirect_ptrs_used = 0;
-		bool indirect_used      = false;
+		int start_block;
+		int numblocks;
+		int direct_ptrs_used;
+		int indirect_ptrs_used;
+		bool indirect_used = false;
 
+		// check if you have to start from a new block	
+		int isBlockFull = offset % DISK_BLOCK_SIZE;	
+
+		if(isBlockFull == 0){ 
+			// have to write to an empty block
+
+			// check how many direct pointers and indirect pointers used
+			start_block = offset / DISK_BLOCK_SIZE + 1;
+			if(start_block > POINTERS_PER_INODE){
+				direct_ptrs_used   = POINTERS_PER_INODE;
+				indirect_ptrs_used = start_block - POINTERS_PER_INODE - 1;
+				indirect_used      = true;
+			}else{
+				direct_ptrs_used = start_block - 1; 
+				indirect_ptrs_used = 0;
+			}
+			// compute how many blocks we need to write to
+			numblocks   = length / DISK_BLOCK_SIZE + 1;
+			
+		}else{
+			// block is not full. we have to fill data block first
+
+			// block which block needs to be filld and where to start filling from
+			int finish_block = offset / DISK_BLOCK_SIZE + 1;
+			int data_start_index = (offset+1) % DISK_BLOCK_SIZE;
+
+			// check where data block we want to fill is
+			int read_index;
+			if(finish_block > POINTERS_PER_INODE){
+				int indirect_addr = ind.indirect;
+				disk_read(indirect_addr, indirect.data);
+				read_index = indirect.pointers[finish_block - POINTERS_PER_INODE - 1];
+				if(read_index > POINTERS_PER_BLOCK){
+					printf("fs: indirect block is full\n");
+
+					// write to disk the return	
+					block.inode[inode_offset] = ind;
+					disk_write(block_of_inode,block.data);
+					if(indirect_used) disk_write(ind.indirect, indirect.data);
+					return 0;
+				}
+				disk_read(read_index, temp.data);
+				
+			}else{
+				read_index = ind.direct[finish_block-1];
+				disk_read( read_index, temp.data);
+			}
+			
+			// fill incomplete block
+			bool blockFull = (length - (DISK_BLOCK_SIZE - data_start_index)) > 0;
+			if(blockFull){
+				for(int i = data_start_index; i < DISK_BLOCK_SIZE; i++){
+					temp.data[i] = data[i-data_start_index];
+				}
+				disk_write(read_index, temp.data);
+				bytes_written += (DISK_BLOCK_SIZE - data_start_index);
+				ind.size += (DISK_BLOCK_SIZE - data_start_index);
+			}else{
+				for(int i = data_start_index; i < data_start_index + length; i++){
+					temp.data[i] = data[i-data_start_index];
+				}
+				disk_write(read_index, temp.data);
+				bytes_written += (DISK_BLOCK_SIZE - data_start_index);
+				ind.size += (DISK_BLOCK_SIZE - data_start_index);
+
+				// write to disk the return	
+				block.inode[inode_offset] = ind;
+				disk_write(block_of_inode,block.data);
+				if(indirect_used) disk_write(ind.indirect, indirect.data);
+				return bytes_written;
+			}
+			
+			// compute which block needs to be written to 
+			start_block = offset / DISK_BLOCK_SIZE + 2;
+			
+			// find how many direct and indirect blocks have been used
+			if(start_block > POINTERS_PER_INODE){
+				direct_ptrs_used   = POINTERS_PER_INODE;
+				indirect_ptrs_used = start_block - POINTERS_PER_INODE - 1;
+				indirect_used      = true;
+			}else{
+				direct_ptrs_used = start_block - 1; 
+				indirect_ptrs_used = 0;
+			}
+			// compute the number of blocks need to write data
+			numblocks   = (length - bytes_written) / DISK_BLOCK_SIZE + 1;
+		}
+		
+		// while there are blocks to be filid
 		while(numblocks > 0){
 
 			if(direct_ptrs_used < POINTERS_PER_INODE){
@@ -399,21 +492,24 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				free_block = allocate_free_block(fs);
 				if(free_block == -1){
 					printf("fs: Cannot allocate a block.\n");
-					return 0;
+					block.inode[inode_offset] = ind;
+					disk_write(block_of_inode,block.data);
+					if(indirect_used) disk_write(ind.indirect, indirect.data);
+					return bytes_written;
 				}
 
 				ind.direct[direct_ptrs_used] = free_block;
 
 				if(numblocks-1 == 0){
 					for(int i = 0; i < length - bytes_written; i++){
-						temp.data[i] = data[i + offset + bytes_written];
+						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += length - bytes_written;
 					ind.size += length - bytes_written;	
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
-						temp.data[i] = data[i + offset + bytes_written];
+						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += DISK_BLOCK_SIZE;
@@ -428,7 +524,10 @@ int fs_write( int inumber, const char *data, int length, int offset )
 					free_block = allocate_free_block(fs);
 					if(free_block == -1){
 						printf("fs: Cannot allocate a block.\n");
-						return 0;
+						block.inode[inode_offset] = ind;
+						disk_write(block_of_inode,block.data);
+						if(indirect_used) disk_write(ind.indirect, indirect.data);
+						return bytes_written;
 					}
 					ind.indirect = free_block; 
 				}
@@ -436,14 +535,17 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				free_block = allocate_free_block(fs);
 				if(free_block == -1){
 					printf("fs: Cannot allocate a block.\n");
-					return 0;
+					block.inode[inode_offset] = ind;
+					disk_write(block_of_inode,block.data);
+					if(indirect_used) disk_write(ind.indirect, indirect.data);
+					return bytes_written;
 				}
 				
 				indirect.pointers[indirect_ptrs_used] = free_block;
 
 				if(numblocks-1 == 0){
 					for(int i = 0; i < length - bytes_written; i++){
-						temp.data[i] = data[i + offset + bytes_written];
+						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += length - bytes_written;
@@ -451,7 +553,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 					
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
-						temp.data[i] = data[i + offset + bytes_written];
+						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += DISK_BLOCK_SIZE;
@@ -462,22 +564,18 @@ int fs_write( int inumber, const char *data, int length, int offset )
 				numblocks--;
 			}else{
 				printf("All of inodes used\n");
-				return bytes_written; // TODO return 0 on error
+				block.inode[inode_offset] = ind;
+				disk_write(block_of_inode,block.data);
+				if(indirect_used) disk_write(ind.indirect, indirect.data);
+				return bytes_written; 
 			}
 
-			numblocks--;	
 		}
 		
 		block.inode[inode_offset] = ind;
 		disk_write(block_of_inode,block.data);
-
 		if(indirect_used) disk_write(ind.indirect, indirect.data);
-
-	}else{
-		// TODO can inode be valid ?
 	}
 		
-	
-	
-	return 0;
+	return bytes_written;
 }
