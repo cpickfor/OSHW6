@@ -111,7 +111,7 @@ int fs_read(int inode_number, char *data, int length, int offset)
         printf("Filesystem is not mounted\n");
         return 0;
     }
-	if(length == 0){return 0;}
+	if(length == 0 || inode_number == 0){return 0;}
 	union fs_block block;
 	int block_number = inode_number / INODES_PER_BLOCK + 1;
 	int inode_index = inode_number % INODES_PER_BLOCK;
@@ -196,14 +196,14 @@ int fs_create()
 		disk_read(i,block.data);
 
 		//check through every inode
-		for(int j = 0; j < INODES_PER_BLOCK; j++)
+		for(int j = 1; j < INODES_PER_BLOCK; j++)
 		{
 			//if inode is not valid then assign to created node
 			if(!block.inode[j].isvalid)
 			{
 
 				block.inode[j] = node;
-				free_bitmap[i] = 1;
+				allocate_bitmap[i] = 1;
 				disk_write(i, block.data);
 				return (i-1)*INODES_PER_BLOCK+j;
 			}
