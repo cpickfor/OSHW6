@@ -179,13 +179,19 @@ int fs_create()
 
 	struct fs_inode node;
 	union fs_block block;
+	union fs_block supB;
+
+	disk_read(0,supB.data);//read super block
+
 	node.size = 0;
 	node.isvalid = 1;
 	//check through every block
-	for(int i = 1; i < disk_size(); i++)
+	for(int i = 1; i < supB.super.nblocks; i++)
 	{
 		//ready block
+
 		disk_read(i,block.data);
+
 		//check through every inode
 		for(int j = 0; j < INODES_PER_BLOCK; j++)
 		{
