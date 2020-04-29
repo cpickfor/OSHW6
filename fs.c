@@ -302,7 +302,7 @@ void fs_debug()
                 printf("inode %d:\n", inumber);
                 printf("    size: %d bytes\n", temp.inode[j].size);
 		if(temp.inode[j].size == 0){
-			return;
+			continue;
 		}
                 
 		printf("    direct blocks:");
