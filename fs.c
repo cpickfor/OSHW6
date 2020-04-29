@@ -416,25 +416,16 @@ int fs_getsize( int inumber )
         printf("Filesystem is not mounted\n");
         return 0;
     }
-	union fs_block block;
+	struct fs_inode inode;
 
-	if(inumber > fs->sb.ninodes){
-		printf("fs: Invalid inode number.\n");
-		return -1;
-	}
+	inode_load(inumber, &inode);
 
-	int block_of_inode = (inumber/INODES_PER_BLOCK) + 1;
-
-	disk_read(block_of_inode, block.data);
-
-	int inode_offset = (inumber % INODES_PER_BLOCK) - 1;
-
-	if(block.inode[inode_offset].isvalid == 0){
+	if(inode.isvalid == 0){
 		printf("fs: inode is invalid.\n");
 		return -1;
 	}	
 
-	return block.inode[inode_offset].size;
+	return inode.size;
 }
 
 
