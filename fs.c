@@ -101,65 +101,73 @@ void inode_load( int inumber, struct fs_inode *inode) {
 
 int fs_read(int inode_number, char *data, int length, int offset)
 {
-	if(!mounted) {
-        printf("Filesystem is not mounted\n");
-        return 0;
-    }
-	if(length == 0 || inode_number == 0){return 0;}
-	union fs_block block;
-	int block_number = inode_number / INODES_PER_BLOCK + 1;
-	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block.data);
-	if(!block.inode[inode_index].isvalid) return -1;
 
-	struct fs_inode node = block.inode[inode_index];
-	if(length+offset > node.size){return -1;}
-
-	int bytes_read = 0;
-	int bytes_seen = 0;
-	//go through all direct pointers
-	for(int i = 0; i < POINTERS_PER_INODE; i++)
-	{
-		int block_num = node.direct[i];
-		union fs_block data_block;
-		disk_read(block_num,data_block.data); //read data block
-		//read data block
-		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
-		{
-			if(bytes_seen >= offset)
-			{
-				data[bytes_read] = data_block.data[i];
-				bytes_read++;
-				if(bytes_read == length){return bytes_read;}
-			}
-			bytes_seen++;
-		}
+	if(!mounted){
+		printf("Error: the filesystem has not been mounted\n");
+		return 0;
 	}
-	//go through indirect pointers
-	int indirect_num = node.indirect;
-	union fs_block indirect_block;
-	disk_read(indirect_num,indirect_block.data);
-	for(int i = 0; i < POINTERS_PER_BLOCK; i++)
-	{
-		int data_block_num = indirect_block.pointers[i];
-		union fs_block in_data_block;
-		disk_read(data_block_num,in_data_block.data);
-		for(int j = 0; j < DISK_BLOCK_SIZE; j++)
-		{
-			if(bytes_seen >= offset)
-			{
-				data[bytes_read] = in_data_block.data[i];
-				bytes_read++;
-				if(bytes_read == length){return bytes_read;}
+	if(inode_number <= 0) {
+		printf("Error: enter a valid inode value\n");		
+		return 0;
+	}
+
+	int i, j, dblock, bytes_read=0;
+	//union fs_block* block = (union fs_block*) malloc(sizeof(union fs_block));
+	union fs_block block, indirect_block;
+	struct fs_inode inode;
+	char loop_data[4096]="";
+	char total_data[16384]="";
+	
+
+	//local inode number
+	int i_offset = inode_number % INODES_PER_BLOCK ;
+	int block_num = inode_number/INODES_PER_BLOCK + 1;
+	int pointer_offset = offset/4096;
+
+	//go to the inode's block
+	disk_read(block_num, block.data);
+	
+	inode = block.inode[i_offset];
+	int isize=inode.size;
+
+	if((!inode.isvalid) || !isize) return 0;
+
+	int bytes_left = ((isize-offset) < length) ? isize-offset : length;
+
+	//go through each direct pointer in the inode
+	for(i=pointer_offset; i<POINTERS_PER_INODE; i++){
+		dblock = inode.direct[i];
+		if(dblock){
+			disk_read(dblock, *(&loop_data));
+			strcat(*(&total_data), *(&loop_data));
+			bytes_read += ((bytes_left-bytes_read) < 4096) ? bytes_left-bytes_read : 4096;
+			
+			if(bytes_read >= bytes_left){
+				strcpy(data, total_data);
+				return bytes_read;
 			}
-			bytes_seen++;
 		}
 	}
 
+	if(inode.indirect){
+		disk_read(inode.indirect, indirect_block.data);
+		
+		//go through all the pointers in the indirect block, starting at offset
+		for(j=(pointer_offset<5) ? 0 : pointer_offset-5; j<POINTERS_PER_BLOCK; j++) {
+			if (indirect_block.pointers[j]){
+				disk_read(indirect_block.pointers[j], *(&loop_data));
+				strcat(*(&total_data), *(&loop_data));
+				bytes_read += ((bytes_left-bytes_read) < 4096) ? bytes_left-bytes_read : 4096;
 
-
+				if(bytes_read >= bytes_left){
+					strcpy(data, total_data);
+					return bytes_read;
+				}
+			}
+		}
+	}
+	
 	return bytes_read;
-
 
 }
 
@@ -573,8 +581,9 @@ int fs_write( int inumber, const char *data, int length, int offset )
 						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
-					bytes_written += length - bytes_written;
-					ind.size += bytes_written;	
+					int t = length - bytes_written;
+					bytes_written += t;
+					ind.size += t;	
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
 						temp.data[i] = data[i + bytes_written];
@@ -616,8 +625,9 @@ int fs_write( int inumber, const char *data, int length, int offset )
 						temp.data[i] = data[i + bytes_written];
 					}		
 					disk_write(free_block,temp.data);
-					bytes_written += length - bytes_written;
-					ind.size += bytes_written;	
+					int t = length - bytes_written;
+					bytes_written += t;
+					ind.size += t;	
 					
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
