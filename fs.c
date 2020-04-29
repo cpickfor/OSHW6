@@ -185,6 +185,9 @@ int fs_create()
 
 	node.size = 0;
 	node.isvalid = 1;
+	node.indirect = 0;
+	memset(node.direct, 0, sizeof(node.direct));
+
 	//check through every block
 	for(int i = 1; i < supB.super.nblocks; i++)
 	{
@@ -198,8 +201,11 @@ int fs_create()
 			//if inode is not valid then assign to created node
 			if(!block.inode[j].isvalid)
 			{
+
 				block.inode[j] = node;
-				return i*INODES_PER_BLOCK+j;
+				free_bitmap[i] = 1;
+				disk_write(i, block.data);
+				return (i-1)*INODES_PER_BLOCK+j;
 			}
 		}
 	}
