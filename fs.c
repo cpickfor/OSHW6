@@ -48,7 +48,41 @@ struct FileSystem {
 struct FileSystem * fs;
 
 void update_Bmap(){
+	union fs_block block;
+	union fs_block indirect_block;
 
+	for (int i = 0; i < disk_size(); i++) {
+		//read
+		disk_read(i, block.data);
+		//check superblock magic number
+		if (!i) {
+			allocate_bitmap[0] = (block.super.magic == FS_MAGIC) ? 1 : 0;
+		}
+		else if (i <= inode_blocks) {//inode blocks
+			//loop through inodes
+			int foundValid = 0;
+			for (int j = 0; j < INODES_PER_BLOCK; j++) {
+				//check validity
+				if (block.inode[j].isvalid) {
+					allocate_bitmap[i] = 1;
+					foundValid = 1;
+					//direct pointers
+					for (int k = 0; k < POINTERS_PER_INODE; k++) {
+						if(block.inode[j].direct[k]) allocate_bitmap[block.inode[j].direct[k]] = 1;
+					}
+					//indirect pointer
+					if (block.inode[j].indirect) {
+						//read
+						disk_read(block.inode[j].indirect, indirect_block.data);
+						for (int m = 0; m < POINTERS_PER_BLOCK; m++) {
+							if(indirect_block.pointers[m]) allocate_bitmap[indirect_block.pointers[m]] = 1;
+						}
+					}
+				}
+			}
+			if(!foundValid) allocate_bitmap[i] = 0;
+		}
+	}
 }
 
 void fs_save_inode(int inode_number, struct fs_inode *node)
