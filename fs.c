@@ -97,6 +97,14 @@ void fs_save_inode(int inode_number, struct fs_inode *node)
 	return;
 }
 
+void inode_load( int inumber, struct fs_inode *inode) {
+	union fs_block block;
+    int block_number = inumber / INODES_PER_BLOCK + 1;
+    int inode_index = inumber % INODES_PER_BLOCK;
+    disk_read(block_number, block.data);
+    *inode = block.inode[inode_index];
+}
+
 int fs_read(int inode_number, char *data, int length, int offset)
 {
 	if(length == 0){return 0;}
@@ -410,7 +418,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 	disk_read(block_of_inode, block.data);
 
-	int inode_offset = (inumber % INODES_PER_BLOCK) - 1;
+	int inode_offset = inumber % INODES_PER_BLOCK;
 
 
 	struct fs_inode ind = block.inode[inode_offset];  // TODO dont forget to write to disk
