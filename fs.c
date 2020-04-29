@@ -101,70 +101,82 @@ void inode_load( int inumber, struct fs_inode *inode) {
 
 int fs_read(int inode_number, char *data, int length, int offset)
 {
-	if(!mounted) {
-        printf("Filesystem is not mounted\n");
-        return 0;
-    }
-	if(length == 0 || inode_number == 0){return 0;}
-	union fs_block block;
-	char chunk_data[4096];
-	memset(chunk_data,'\0',4096);
-	char all_data [4096*4];
-	memset(all_data,'\0',4096*4);
+if(!mounted){
+		printf("Error: the filesystem has not been mounted\n");
+		return 0;
+	}
+	if(inode_number <= 0) {
+		return 0;
+	}
 
-	int block_number = inode_number / INODES_PER_BLOCK + 1;
-	int inode_index = inode_number % INODES_PER_BLOCK;
-	disk_read(block_number,block.data);
-	if(!block.inode[inode_index].isvalid) return -1;
 
-	struct fs_inode node = block.inode[inode_index];
-	if(length+offset > node.size || !node.isvalid){return -1;}
+	int inumber = inode_number % INODES_PER_BLOCK ;
+	int blk = inode_number/INODES_PER_BLOCK + 1;
+	int byte_offset = offset/4096;
+	int dblock = 0;
+    int bytes_read=0;
+	union fs_block block, indirect_block;
+	struct fs_inode inode;
+	char chunk_data[4096]="";
+	char all_data[4*4096]="";
+	
 
-	int bytes_read = 0;
-	int bytes_left = node.size-offset;
-	if(node.size-offset < length){bytes_left = length;}//if there is not enough data to copy just grab till end
-	//go through all direct pointers
-	for(int i = 0; i < POINTERS_PER_INODE; i++)
+
+	disk_read(blk, block.data);
+	
+	inode = block.inode[inumber];
+	int isize=inode.size;
+
+	if((!inode.isvalid) || !isize) return 0;
+
+	int bytes_left = ((isize-offset) < length) ? isize-offset : length;
+
+	for(int i=byte_offset; i<POINTERS_PER_INODE; i++)
 	{
-		int block_num = node.direct[i];
-		disk_read(block_num,*(&chunk_data)); //read data block
-		strcat(*(&all_data),*(&chunk_data));//append chunk to sum
+		dblock = inode.direct[i];
+		disk_read(dblock, *(&chunk_data));
+		strcat(*(&all_data), *(&chunk_data));
 		if(bytes_left-bytes_read < 4096)
 		{
 			bytes_read += bytes_left-bytes_read;
 		}
-		else{bytes_read+=4096;}
-
+		else
+		{
+			bytes_read += 4096;
+		}
 		if(bytes_read >= bytes_left)
 		{
-			strncpy(data,all_data,bytes_read);
+			strcpy(data, all_data);
 			return bytes_read;
 		}
+		
 	}
-	//go through indirect pointers
-	int indirect_num = node.indirect;
-	int pointers_per_offset = offset/4096;
-	union fs_block indirect_block;
-	disk_read(indirect_num,indirect_block.data);
+
+
+	disk_read(inode.indirect, indirect_block.data);
 	int i = 0;
-	if(pointers_per_offset >= 5){i = pointers_per_offset-5;}
-	for(; i < POINTERS_PER_BLOCK; i++)
+	if(byte_offset >= 5){i = byte_offset-5;}
+	for(; i<POINTERS_PER_BLOCK; i++) 
 	{
-		int data_block_num = indirect_block.pointers[i];
-		disk_read(data_block_num,*(&chunk_data));
-		strcat(*(&all_data),*(&chunk_data));
+		disk_read(indirect_block.pointers[i], *(&chunk_data));
+		strcat(*(&all_data), *(&chunk_data));
 		if(bytes_left-bytes_read < 4096)
 		{
 			bytes_read += bytes_left-bytes_read;
 		}
-		else{bytes_read+=4096;}
+		else
+		{
+			bytes_read += 4096;
+		}
 
 		if(bytes_read >= bytes_left)
 		{
-			strncpy(data,all_data,bytes_read);
+			strcpy(data, all_data);
 			return bytes_read;
 		}
+		
 	}
+	
 	
 	return bytes_read;
 
