@@ -448,6 +448,8 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	union fs_block temp;
 	union fs_block indirect;
 
+	printf("writing\n");
+
 	if(inumber > fs->sb.ninodes || inumber < 1){
 		printf("fs: Invalid inode number.\n");
 		return 0;
