@@ -40,12 +40,6 @@ union fs_block {
 	char data[DISK_BLOCK_SIZE];
 };
 
-struct FileSystem {
-	struct fs_superblock sb;
-	bool * free_blocks;
-};
-
-struct FileSystem * fs;
 
 void update_Bmap(){
 	union fs_block block;
@@ -214,7 +208,7 @@ int fs_create()
 
 
 
-void initialize_free_block_bitmap(struct FileSystem * fs){
+/*void initialize_free_block_bitmap(struct FileSystem * fs){
 
 	// check that filesytem is valid	
 	if(fs->sb.magic != FS_MAGIC){
@@ -230,19 +224,20 @@ void initialize_free_block_bitmap(struct FileSystem * fs){
 		printf("fs: Error allocating memory for free block bitmap.\n");
 		exit(1);
 	}
-}
+} */
 
-ssize_t allocate_free_block(struct FileSystem * fs){
+int allocate_free_block(){
+	union fs_block block;
+	disk_read(0,block.data);
 
 	// look for free block
-	for (ssize_t i = 0; i < fs->sb.nblocks; i++){
-		if(!fs->free_blocks[i]){
-			fs->free_blocks[i] = true;
+	for (int i = 0; i < block.super.nblocks; i++){
+		if(!allocate_bitmap[i]){
+			allocate_bitmap[i] = 1;
 			return i;
 		}
 	}
-
-	// no free blocks	
+	
 	return -1;
 }
 
@@ -439,13 +434,12 @@ int fs_write( int inumber, const char *data, int length, int offset )
 	union fs_block temp;
 	union fs_block indirect;
 
-	printf("writing\n");
+	disk_read(0,block.data);
 
-	if(inumber > fs->sb.ninodes || inumber < 1){
+	if(inumber > block.super.ninodes || inumber < 1){
 		printf("fs: Invalid inode number.\n");
 		return 0;
 	}
-
 	int block_of_inode = (inumber / INODES_PER_BLOCK) + 1;
 
 	disk_read(block_of_inode, block.data);
@@ -563,7 +557,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 
 			if(direct_ptrs_used < POINTERS_PER_INODE){
 				
-				free_block = allocate_free_block(fs);
+				free_block = allocate_free_block();
 				if(free_block == -1){
 					printf("fs: Cannot allocate a block.\n");
 					block.inode[inode_offset] = ind;
@@ -580,7 +574,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += length - bytes_written;
-					ind.size += length - bytes_written;	
+					ind.size += bytes_written;	
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
 						temp.data[i] = data[i + bytes_written];
@@ -595,7 +589,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 			}else if (indirect_ptrs_used < POINTERS_PER_BLOCK){
 
 				if (!indirect_used)	{
-					free_block = allocate_free_block(fs);
+					free_block = allocate_free_block();
 					if(free_block == -1){
 						printf("fs: Cannot allocate a block.\n");
 						block.inode[inode_offset] = ind;
@@ -606,7 +600,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 					ind.indirect = free_block; 
 				}
 				
-				free_block = allocate_free_block(fs);
+				free_block = allocate_free_block();
 				if(free_block == -1){
 					printf("fs: Cannot allocate a block.\n");
 					block.inode[inode_offset] = ind;
@@ -623,7 +617,7 @@ int fs_write( int inumber, const char *data, int length, int offset )
 					}		
 					disk_write(free_block,temp.data);
 					bytes_written += length - bytes_written;
-					ind.size += length - bytes_written;	
+					ind.size += bytes_written;	
 					
 				}else{
 					for(int i = 0; i < DISK_BLOCK_SIZE; i++){
