@@ -101,69 +101,68 @@ void inode_load( int inumber, struct fs_inode *inode) {
 
 int fs_read(int inode_number, char *data, int length, int offset)
 {
+	if(!mounted) {
+        printf("Filesystem is not mounted\n");
+        return 0;
+    }
+	if(length == 0 || inode_number == 0){return 0;}
+	union fs_block block;
+	char chunk_data[4096];
+	memset(chunk_data,'\0',4096);
+	char all_data [4096*4];
+	memset(all_data,'\0',4096*4);
 
-	if(!mounted){
-		printf("Error: the filesystem has not been mounted\n");
-		return 0;
-	}
-	if(inode_number <= 0) {
-		printf("Error: enter a valid inode value\n");		
-		return 0;
-	}
+	int block_number = inode_number / INODES_PER_BLOCK + 1;
+	int inode_index = inode_number % INODES_PER_BLOCK;
+	disk_read(block_number,block.data);
+	if(!block.inode[inode_index].isvalid) return -1;
 
-	int i, j, dblock, bytes_read=0;
-	//union fs_block* block = (union fs_block*) malloc(sizeof(union fs_block));
-	union fs_block block, indirect_block;
-	struct fs_inode inode;
-	char loop_data[4096]="";
-	char total_data[16384]="";
-	
+	struct fs_inode node = block.inode[inode_index];
+	if(length+offset > node.size || !node.isvalid){return -1;}
 
-	//local inode number
-	int i_offset = inode_number % INODES_PER_BLOCK ;
-	int block_num = inode_number/INODES_PER_BLOCK + 1;
-	int pointer_offset = offset/4096;
+	int bytes_read = 0;
+	int bytes_left = node.size-offset;
+	if(node.size-offset < length){bytes_left = length;}//if there is not enough data to copy just grab till end
+	//go through all direct pointers
+	for(int i = 0; i < POINTERS_PER_INODE; i++)
+	{
+		int block_num = node.direct[i];
+		disk_read(block_num,*(&chunk_data)); //read data block
+		strcat(*(&all_data),*(&chunk_data));//append chunk to sum
+		if(bytes_left-bytes_read < 4096)
+		{
+			bytes_read += bytes_left-bytes_read;
+		}
+		else{bytes_read+=4096;}
 
-	//go to the inode's block
-	disk_read(block_num, block.data);
-	
-	inode = block.inode[i_offset];
-	int isize=inode.size;
-
-	if((!inode.isvalid) || !isize) return 0;
-
-	int bytes_left = ((isize-offset) < length) ? isize-offset : length;
-
-	//go through each direct pointer in the inode
-	for(i=pointer_offset; i<POINTERS_PER_INODE; i++){
-		dblock = inode.direct[i];
-		if(dblock){
-			disk_read(dblock, *(&loop_data));
-			strcat(*(&total_data), *(&loop_data));
-			bytes_read += ((bytes_left-bytes_read) < 4096) ? bytes_left-bytes_read : 4096;
-			
-			if(bytes_read >= bytes_left){
-				strcpy(data, total_data);
-				return bytes_read;
-			}
+		if(bytes_read >= bytes_left)
+		{
+			strncpy(data,all_data,bytes_read);
+			return bytes_read;
 		}
 	}
+	//go through indirect pointers
+	int indirect_num = node.indirect;
+	int pointers_per_offset = offset/4096;
+	union fs_block indirect_block;
+	disk_read(indirect_num,indirect_block.data);
+	int i = 0;
+	if(pointers_per_offset >= 5){i = pointers_per_offset-5;}
+	for(; i < POINTERS_PER_BLOCK; i++)
+	{
+		int data_block_num = indirect_block.pointers[i];
+		disk_read(data_block_num,*(&chunk_data));
+		strcat(*(&all_data),*(&chunk_data));
+		if(bytes_left-bytes_read < 4096)
+		{
+			bytes_read += bytes_left-bytes_read;
+		}
+		else{bytes_read+=4096;}
 
-	if(inode.indirect){
-		disk_read(inode.indirect, indirect_block.data);
-		
-		//go through all the pointers in the indirect block, starting at offset
-		for(j=(pointer_offset<5) ? 0 : pointer_offset-5; j<POINTERS_PER_BLOCK; j++) {
-			if (indirect_block.pointers[j]){
-				disk_read(indirect_block.pointers[j], *(&loop_data));
-				strcat(*(&total_data), *(&loop_data));
-				bytes_read += ((bytes_left-bytes_read) < 4096) ? bytes_left-bytes_read : 4096;
-
-				if(bytes_read >= bytes_left){
-					strcpy(data, total_data);
-					return bytes_read;
-				}
-			}
+		if(bytes_read >= bytes_left)
+		{
+			strncpy(data,all_data,bytes_read);
+			return bytes_read;
 		}
 	}
 	
@@ -213,26 +212,6 @@ int fs_create()
 	}
 	return 0;
 }
-
-
-
-/*void initialize_free_block_bitmap(struct FileSystem * fs){
-
-	// check that filesytem is valid	
-	if(fs->sb.magic != FS_MAGIC){
-		printf("fs: Error initializing free block bitmap.\n");
-		exit(1);
-	}
-
-	// allocate free block bitmap
-	fs->free_blocks = calloc(fs->sb.nblocks,sizeof(bool));
-
-	// give error if allocating memory fails
-	if(!fs->free_blocks) {
-		printf("fs: Error allocating memory for free block bitmap.\n");
-		exit(1);
-	}
-} */
 
 int allocate_free_block(){
 	union fs_block block;
