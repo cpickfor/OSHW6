@@ -245,6 +245,7 @@ int fs_format()
 	disk_read(0,block.data);
 	int nblocks = disk_size();
 	int ninodeblocks = ceil(nblocks/10);
+	if(ninodeblocks == 0) ninodeblocks = 1;
 
 	for(int i = 1; i <= block.super.ninodeblocks; i++) {
         union fs_block inode;
@@ -259,7 +260,7 @@ int fs_format()
 	superblock.super.magic = FS_MAGIC;
 	superblock.super.nblocks = nblocks;
 	superblock.super.ninodeblocks = ninodeblocks;
-	superblock.super.ninodes = INODES_PER_BLOCK;
+	superblock.super.ninodes = (ninodeblocks * INODES_PER_BLOCK);
     disk_write(0,superblock.data);
 
     return 1;
